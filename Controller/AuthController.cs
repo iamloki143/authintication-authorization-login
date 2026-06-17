@@ -170,6 +170,12 @@ public class AuthController : ControllerBase
         _context.RefreshTokens.Add(refreshTokenEntity);
         _context.SaveChanges();
 
+        _cache.Set(
+            $"refresh_{refreshToken}",
+            refreshTokenEntity,
+            TimeSpan.FromDays(7)
+        );
+
         return Ok(new
         {
             AccessToken = jwt,
@@ -211,8 +217,20 @@ public class AuthController : ControllerBase
     [HttpPost("refresh")]
     public IActionResult Refresh(RefreshTokenDto request)
     {
-        var tokenEntity = _context.RefreshTokens
-            .FirstOrDefault(rt => rt.Token == request.RefreshToken);
+        var cacheKey = $"refresh_{request.RefreshToken}";
+        if (!_cache.TryGetValue(cacheKey, out RefreshToken tokenEntity))
+        {
+            tokenEntity = _context.RefreshTokens
+                .FirstOrDefault(rt => rt.Token == request.RefreshToken);
+            if (tokenEntity != null)
+            {
+                _cache.Set(cacheKey, tokenEntity, TimeSpan.FromDays(7));
+            }
+        }
+        else
+        {
+            Console.WriteLine("Refresh token cache hit");
+        }
         if (tokenEntity == null || tokenEntity.IsRevoked || tokenEntity.Expiry < DateTime.UtcNow)
         {
             return Unauthorized(new { Message = "Invalid Refresh Token" });
@@ -239,6 +257,7 @@ public class AuthController : ControllerBase
         }
         tokenEntity.IsRevoked = true;
         _context.SaveChanges();
+        _cache.Remove($"refresh_{request.RefreshToken}");
         return Ok(new
         {
             Message = "Logged out successfully"
