@@ -9,6 +9,7 @@ using Microsoft.IdentityModel.Tokens; // For creating signing credentials for th
 using Microsoft.AspNetCore.Authorization;  // For adding authorization attributes to controller actions (if needed)
 using System.Security.Cryptography;
 using LoginApi.Services;
+using Microsoft.Extensions.Caching.Memory; // For caching verification tokens (if needed)
 
 namespace LoginApi.Controllers;
 
@@ -47,15 +48,18 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly EmailService _emailService;
+    private readonly IMemoryCache _cache;
 
     public AuthController(
     AppDbContext context,
     IConfiguration configuration,
-    EmailService emailService)
+    EmailService emailService,
+    IMemoryCache cache)
 {
     _context = context;
     _configuration = configuration;
     _emailService = emailService;
+    _cache = cache;
 }
     [HttpGet]
     public IActionResult Test()
@@ -188,10 +192,21 @@ public class AuthController : ControllerBase
     [HttpGet("admin")]
     public IActionResult AdminOnly()
     {
-        return Ok(new
+        var UserId = int.Parse(User.FindFirst("UserId")!.Value);
+        var cacheKey = $"user_{UserId}";
+        var user = _cache.GetOrCreate(cacheKey, entry =>
         {
-            Message = "Welcome Admin"
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+            return _context.Users.FirstOrDefault(u => u.Id == UserId);
+            
         });
+        return Ok(new
+            {
+                user!.Id,
+                user.Username,
+                user.Email,
+                user.Role
+            });
     }
     [HttpPost("refresh")]
     public IActionResult Refresh(RefreshTokenDto request)
