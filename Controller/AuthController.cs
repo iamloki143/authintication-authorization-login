@@ -218,7 +218,7 @@ public class AuthController : ControllerBase
     public IActionResult Refresh(RefreshTokenDto request)
     {
         var cacheKey = $"refresh_{request.RefreshToken}";
-        if (!_cache.TryGetValue(cacheKey, out RefreshToken tokenEntity))
+        if (!_cache.TryGetValue(cacheKey, out RefreshToken? tokenEntity))
         {
             tokenEntity = _context.RefreshTokens
                 .FirstOrDefault(rt => rt.Token == request.RefreshToken);
